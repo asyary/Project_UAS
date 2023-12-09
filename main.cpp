@@ -3,7 +3,7 @@
 #include <random>
 #include <conio.h>
 #include <signal.h>
-#include "sha256.h"
+#include "include/sha256.h"
 
 using namespace std;
 
