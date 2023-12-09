@@ -1,0 +1,6 @@
+debugging
+main.exe
+data/*
+!data/.gitkeep
+userdata/*
+!userdata/.gitkeep
