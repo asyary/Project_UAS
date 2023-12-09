@@ -1,24 +1,76 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+#include <chrono>
+#include <thread>
 #include <conio.h>
+#include <windows.h>
 #include <signal.h>
+#include <iomanip>
 #include "include/sha256.h"
 
 using namespace std;
+using namespace std::chrono;
+using namespace std::this_thread;
 
-struct {
+struct UserData {
+	int id;
+	string nama;
+	string user;
+	string hashPin;
+	string level;
+	double saldo;
+	double pinjaman;
+};
+
+struct MasterData {
 	int id;
 	string user;
-	string nama;
 	string hashPin;
-} user;
+};
+
+MasterData* user;
 
 void greet();
 void login();
 void daftar();
 char optionHandler();
-bool isQuit = false;
+bool isQuit = false, doneLoading = false;
+
+void loadingScr() {
+	char spinner[4] = {'|', '/', '-', '\\'};
+	int counter  = 0;
+	cout << "Loading...  ";
+	while(!doneLoading) {
+		cout << '\b' << spinner[counter];
+		counter = (counter+1) % 4;
+		sleep_for(milliseconds(200));
+	}
+}
+
+void readMasterData() {
+
+}
+
+void ShowConsoleCursor(bool showFlag) {
+	HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	CONSOLE_CURSOR_INFO cursorInfo;
+
+	GetConsoleCursorInfo(out, &cursorInfo);
+	cursorInfo.bVisible = showFlag;
+	SetConsoleCursorInfo(out, &cursorInfo);
+}
+
+void init() {
+	ShowConsoleCursor(false);
+	thread t1(loadingScr);
+	thread t2(readMasterData);
+	t1.join();
+	t2.join();
+	ShowConsoleCursor(true);
+	return greet();
+}
 
 void quit() {
 	isQuit = true;
@@ -33,7 +85,8 @@ void menu(int num) {
 			system("cls");
 			string mainMenu = "==== Selamat Datang ====\n\n1. Login\n2. Daftar\n0. Keluar\n\n";
 			cout << mainMenu << "Masukkan pilihan : ";
-			char pil = optionHandler();
+			char pil = '\0';
+			pil = optionHandler();
 			switch (pil) {
 				case '1':
 					login();
@@ -45,6 +98,7 @@ void menu(int num) {
 
 				case '0':
 					quit();
+				case '\0':
 					return;
 				
 				default:
@@ -96,8 +150,26 @@ char optionHandler() {
 	return pil;
 };
 
-bool checkUser(string nama) {
+string hashAlgo(string *user, string *pass) {
+	minstd_rand generator(stoi(*pass));
+	string toHash = *user + *pass + to_string(generator());
+	cout << toHash << "\n";
+	// Implementasi SHA256 ini breaks down pada 55 character
+	string hashed = sha256(toHash);
+	return hashed;
+}
 
+bool checkUser(string *user) {
+	if (*user == "\0") {
+		exit(0);
+	}
+	if (user->length() == 0) {
+		errorHandler("Username tidak boleh kosong!");
+		return false;
+	} else if (user->length() > 20) {
+		errorHandler("Username terlalu panjang!");
+		return false;
+	}
 }
 
 bool validate(string nama, string hash) {
@@ -107,19 +179,11 @@ bool validate(string nama, string hash) {
 void login() {
 	system("cls");
 	cout << "==== Login ====\n\n";
-	string user;
+	string user = "\0";
 	cout << "Username : ";
-	cin.ignore();
 	getline(cin, user);
-	if (user.length() == 0) {
-		errorHandler("Username tidak boleh kosong!");
+	if (!checkUser(&user)) {
 		return login();
-	} else if (user.length() > 20) {
-		errorHandler("Username terlalu panjang!");
-		return login();
-	}
-	if (!checkUser(user)) {
-
 	}
 	string pass = "";
 	char ch;
@@ -138,11 +202,10 @@ void login() {
 		pass += ch;
 		cout << '*';
 	}
-	minstd_rand generator(stoi(pass));
-	string toHash = user + pass + to_string(generator());
-	// Implementasi SHA256 ini breaks down pada 55 character
-	string hash = sha256(toHash);
-	validate(user, hash);
+	string hashed = hashAlgo(&user, &pass);
+	cout << hashed;
+	cin >> ch;
+	validate(user, hashed);
 }
 
 void daftar() {
