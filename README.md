@@ -14,6 +14,7 @@
 Project UAS kelompok 3 TI E '23 UNESA\
 Membuat mockup sistem bank
 [Link GitHub Repo](https://github.com/asyary/Project_UAS/tree/master)
+![Flowchart](https://raw.githubusercontent.com/asyary/Project_UAS/master/Flowchart.png)
 
 ## Installation
 
