@@ -19,4 +19,8 @@ g++ main.cpp -o main ; ./main
 
 ## Credit
 
-[SHA-256 C++ Implementation by hak8or](https://gist.github.com/hak8or/8794351)
+[SHA-256 C++ Implementation by okdshin](https://github.com/okdshin/PicoSHA2)
+
+### Sidenote
+
+> ``📝`` Hanya compatible untuk windows

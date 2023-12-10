@@ -1,506 +1,377 @@
-#include <iostream>
+/*
+The MIT License (MIT)
+
+Copyright (C) 2017 okdshin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+#ifndef PICOSHA2_H
+#define PICOSHA2_H
+// picosha2:20140213
+
+#ifndef PICOSHA2_BUFFER_SIZE_FOR_INPUT_ITERATOR
+#define PICOSHA2_BUFFER_SIZE_FOR_INPUT_ITERATOR \
+    1048576  //=1024*1024: default is 1MB memory
+#endif
+
+#include <algorithm>
+#include <cassert>
+#include <iterator>
 #include <sstream>
-#include <bitset>
 #include <vector>
-#include <iomanip>
-#include <cstring>
+#include <fstream>
+namespace picosha2 {
+typedef unsigned long word_t;
+typedef unsigned char byte_t;
 
-// By: hak8or
-// To compile: g++ -std=c++0x SHA_256_hak.cpp -o SHA_256_hak
-// To run self test just run the following: SHA_256_hak
-// To run and generate a hash run the following: SHA_256_hak stringtohashgoeshere
+static const size_t k_digest_size = 32;
 
-// Description: 
-//	SHA-256 is one of the most common one way security hashes used in the wild,
-//	SSL, SSH, PGP, and bitcoin all rely on this hash function. I had originally
-//	hoped on doing SHA-3, but the standard is still not done, and the math behind
-//	it seeems a bit over my head due to the lack of a "plain english" explanation
-//	like NIST provided for SHA-2.
-//
-//	I find the coolest part of this is how the core of this can be simplified to
-//	just rotating bits around, which isn't that difficult with logic gates and
-//	whatnot on an FPGA. This being at its core just rotating bits mean it is
-//	easy to impliment on a hardware level for even the most space conservative 
-//	IC's or even in software on low power device.
-//
-// Implimentation:
-//	This implimentation is for SHA-256, which generates a 256 bit hash for any
-//	message up to a size of 2^64 bits (2^64 bits / 8 bit ASCII chars gives about
-//	two quintillion characters).
-//
-//		Step 1)
-//	Pre Processing, we take the message and add "padding" to it consisting of 1 
-// and 0's so the message is in 512 bit incriments, or blocks. This implimentation
-//	assumes that the message will be no longer than 55 characters as it does not
-//	handle messages which require more than one 512 bit block for longer length
-//	messages. Lastly, the initial hash values are set which will be used for
-//	the hash computation.
-//
-//	Padding specifically consist of having your message, adding 0's to it so you
-//	will have the current length be 448 bits long, and then adding 64 bits which
-//	say how long the original message was, giving you a total of 512 bits.
-//
-//	Initilizing just means initializing variables used in the hash computation so
-//	the first round of hashing does not start with 0's, which would make this
-//	hashing broken security wise.
-//
-//		Step 2)
-//	The actual hash computation. It is based on a message queue which sends 64
-//	thirty two bit words to the next round, eight working variables with two
-//	temporary variables, and 8 hash segments which will be combined at the end
-//	to the 256 bit hash.
-//
+namespace detail {
+inline byte_t mask_8bit(byte_t x) { return x & 0xff; }
 
-// Primary resource for getting an idea of what is going on: 
-//	http://csrc.nist.gov/publications/fips/fips180-4/fips-180-4.pdf
-// For more information:
-//	http://tools.ietf.org/html/rfc6234
-// Testing:
-//	http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/SHA256.pdf
-// Concrete Specification:
-//	http://tools.ietf.org/html/rfc6234
-//
-// Useful links:
-//	http://www.miniwebtool.com/hex-calculator
-//	http://en.cppreference.com/w/cpp/language/ascii
-//	https://github.com/adambard/learnxinyminutes-docs
-//
-// Should put this in a class someday instead of this mess of functions.
-// If will use boost program options, put in a help option.
+inline word_t mask_32bit(word_t x) { return x & 0xffffffff; }
 
-using namespace std;
+const word_t add_constant[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-// Converts the ASCII string to a binary representation.
-vector<unsigned long> convert_to_binary(const string);
+const word_t initial_message_digest[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372,
+                                          0xa54ff53a, 0x510e527f, 0x9b05688c,
+                                          0x1f83d9ab, 0x5be0cd19};
 
-// Pads the messages to make sure they are a multiple of 512 bits.
-vector<unsigned long> pad_to_512bits(const vector<unsigned long>);
+inline word_t ch(word_t x, word_t y, word_t z) { return (x & y) ^ ((~x) & z); }
 
-// Changes the n 8 bit segments representing every ASCII character to 32 bit words.
-vector<unsigned long> resize_block(vector<unsigned long>);
-
-// The actual hash computing.
-string compute_hash(const vector<unsigned long>);
-string sha256(string msg);
-
-// Used for debugging. Decided to leave this in for if I ever will expand on this.
-	string show_as_hex(unsigned long);
-	void cout_block_state(vector<unsigned long>);
-	string show_as_binary(unsigned long);
-	const bool show_block_state_add_1 = 0;
-	const bool show_distance_from_512bit = 0;
-	const bool show_padding_results = false;
-	const bool show_working_vars_for_t = 0;
-	const bool show_T1_calculation = false;
-	const bool show_T2_calculation = false;
-	const bool show_hash_segments = false;
-	const bool show_Wt = false;
-
-// Taken from NIST spec. I find it amazing how this can all be done by just
-// bit rotations.
-	#define ROTRIGHT(word,bits) (((word) >> (bits)) | ((word) << (32-(bits))))
-	#define SSIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
-	#define SSIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
-	#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
-	#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
-
-// Supposed incorrect implimentation from NIST.
-// BSIG0 is replaced with EP0 and BSIG1 is replaced with EP0 in the implimentation.
-	#define BSIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
-	#define BSIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
-
-#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
-#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
-
-/* Function : resize_block
-Resize the blocks from 64 8 bit sections to 16 32 bit sections.
-
-Input : Vector of individual 8 bit ascii values
-Output : Vector of 32 bit words which are combined ascii values.
-Errors : The message length should be no more than 55 characters.*/
-vector<unsigned long> resize_block(vector<unsigned long> input)
-{
-	vector<unsigned long> output(16);
-
-	// Loop through the 64 sections by 4 steps and merge those 4 sections.
-	for(int i = 0; i < 64; i = i + 4)
-	{
-		// Lets make a big 32 bit section first.
-		bitset<32> temp(0);
-
-		// Shift the blocks to their assigned spots and OR them with the original
-		// to combine them.
-		temp = (unsigned long) input[i] << 24;
-		temp |= (unsigned long) input[i + 1] << 16;
-		temp |= (unsigned long) input[i + 2] << 8;
-		temp |= (unsigned long) input[i + 3];
-
-		// Puts the new 32 bit word into the correct output array location.
-		output[i/4] = temp.to_ulong();
-	}
-
-	return output;
+inline word_t maj(word_t x, word_t y, word_t z) {
+    return (x & y) ^ (x & z) ^ (y & z);
 }
 
-/* Function : cout_block_state
-Shows the current contents of all the blocks in binary. This is used solely
-for debugging and has no actual use in the implimentation.
-
-Input : Vector of the current blocks.
-Output : Contents of each block in binary and hex.*/
-void cout_block_state(vector<unsigned long> block)
-{
-	cout << "---- Current State of block ----\n"; 
-	for (int i = 0; i < block.size(); i++)
-	{
-		cout << "block[" << i << "] binary: " << show_as_binary(block[i])
-			<< "     hex y: 0x" << show_as_hex(block[i]) << endl;
-	}
+inline word_t rotr(word_t x, std::size_t n) {
+    assert(n < 32);
+    return mask_32bit((x >> n) | (x << (32 - n)));
 }
 
-/* Function : show_as_hex
-Shows the current contents of the block in hex.
-This is mainly to avoid having to change the stream from hex to dec and back
-again in the cout statement which would have been error prone.
+inline word_t bsig0(word_t x) { return rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22); }
 
-Input : A 32 or less bit block
-Output : Contents of the block in hex as a string. */
-string show_as_hex(unsigned long input)
-{
-	bitset<32> bs(input);
-	unsigned n = bs.to_ulong();
+inline word_t bsig1(word_t x) { return rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25); }
 
-	stringstream sstream;
-	sstream << std::hex << std::setw(8) << std::setfill('0') << n;
-	string temp;
-	sstream >> temp;
-
-	return temp;
+inline word_t shr(word_t x, std::size_t n) {
+    assert(n < 32);
+    return x >> n;
 }
 
-/* Function : show_as_binary
-Shows the current contents of the block in hex.
-This is mainly to avoid having to change the stream from hex to dec and back
-again in the cout statement which would have been error prone.
+inline word_t ssig0(word_t x) { return rotr(x, 7) ^ rotr(x, 18) ^ shr(x, 3); }
 
-Input : A 32 or less bit block
-Output : Contents of the block in binary as a stromg. */
-string show_as_binary(unsigned long input)
-{
-	bitset<8> bs(input);
-	return bs.to_string();
+inline word_t ssig1(word_t x) { return rotr(x, 17) ^ rotr(x, 19) ^ shr(x, 10); }
+
+template <typename RaIter1, typename RaIter2>
+void hash256_block(RaIter1 message_digest, RaIter2 first, RaIter2 last) {
+    assert(first + 64 == last);
+    static_cast<void>(last);  // for avoiding unused-variable warning
+    word_t w[64];
+    std::fill(w, w + 64, word_t(0));
+    for (std::size_t i = 0; i < 16; ++i) {
+        w[i] = (static_cast<word_t>(mask_8bit(*(first + i * 4))) << 24) |
+               (static_cast<word_t>(mask_8bit(*(first + i * 4 + 1))) << 16) |
+               (static_cast<word_t>(mask_8bit(*(first + i * 4 + 2))) << 8) |
+               (static_cast<word_t>(mask_8bit(*(first + i * 4 + 3))));
+    }
+    for (std::size_t i = 16; i < 64; ++i) {
+        w[i] = mask_32bit(ssig1(w[i - 2]) + w[i - 7] + ssig0(w[i - 15]) +
+                          w[i - 16]);
+    }
+
+    word_t a = *message_digest;
+    word_t b = *(message_digest + 1);
+    word_t c = *(message_digest + 2);
+    word_t d = *(message_digest + 3);
+    word_t e = *(message_digest + 4);
+    word_t f = *(message_digest + 5);
+    word_t g = *(message_digest + 6);
+    word_t h = *(message_digest + 7);
+
+    for (std::size_t i = 0; i < 64; ++i) {
+        word_t temp1 = h + bsig1(e) + ch(e, f, g) + add_constant[i] + w[i];
+        word_t temp2 = bsig0(a) + maj(a, b, c);
+        h = g;
+        g = f;
+        f = e;
+        e = mask_32bit(d + temp1);
+        d = c;
+        c = b;
+        b = a;
+        a = mask_32bit(temp1 + temp2);
+    }
+    *message_digest += a;
+    *(message_digest + 1) += b;
+    *(message_digest + 2) += c;
+    *(message_digest + 3) += d;
+    *(message_digest + 4) += e;
+    *(message_digest + 5) += f;
+    *(message_digest + 6) += g;
+    *(message_digest + 7) += h;
+    for (std::size_t i = 0; i < 8; ++i) {
+        *(message_digest + i) = mask_32bit(*(message_digest + i));
+    }
 }
 
-/* Function : convert_to_binary
-Takes the string and convers all characters to their ASCII Binary equivilents.
+}  // namespace detail
 
-Input : A string of any length
-Output : A vector consisting of one 8 bit value per ASCII character. */
-vector<unsigned long> convert_to_binary(const string input)
-{
-	// Lets make a vector to hold all the ASCII character values.
-	vector<unsigned long> block;
-
-	// For each character, convert the ASCII chararcter to its binary
-	// representation.
-	for (int i = 0; i < input.size(); ++i)
-	{
-		// Make a temporary variable called B to store the 8 bit pattern
-		// for the ASCII value.
-		bitset<8> b(input.c_str()[i]);
-
-		// Add that 8 bit pattern into the block.
-		block.push_back(b.to_ulong());
-	}
-
-	return block;
+template <typename InIter>
+void output_hex(InIter first, InIter last, std::ostream& os) {
+    os.setf(std::ios::hex, std::ios::basefield);
+    while (first != last) {
+        os.width(2);
+        os.fill('0');
+        os << static_cast<unsigned int>(*first);
+        ++first;
+    }
+    os.setf(std::ios::dec, std::ios::basefield);
 }
 
-/* Function : pad_to_512bits
-Takes the vector of ASCII values in binary and pad it so that there will be a
-total of 512 bits.
-
-Padding specifically consist of having your message, adding 1, and adding 0's to
-it so you will have the current length be 448 bits long, and then adding 64 bits
-which say how long the original message was, giving you a total of 512 bits.
-
-Input : The message in the form of a vector containing 8 bit binary ASCII values.
-Output : A padded vector consisting of one 8 bit value per ASCII character. */
-vector<unsigned long> pad_to_512bits(vector<unsigned long> block)
-{
-	// Variable names as per NIST.
-
-	// l will represent the length of the message in terms of bits, with each
-	// block representing one 8 bit ascii character.
-	int l = block.size() * 8;
-	
-	// Equation for padding is l + 1 + k = 448 mod 512
-	// Simplified to: l + 1 + k = 448
-	//		  448 - 1 - l = k
-	//		  447 - l = k
-	// l = length of message in bits
-	// k = how much zero's to add so new message will be a multiple of 512.
-	int k = 447 - l;
-
-	// First add in another 8 bit block with the first bit set to 1
-	if(show_block_state_add_1)
-		cout_block_state(block);
-
-	unsigned long t1 = 0x80;
-	block.push_back(t1);
-
-	if(show_block_state_add_1)
-		cout_block_state(block);
-
-	// We just added in 7 zero's, so subtract 7 from k.
-	k = k - 7;
-
-	// Find how far away we are from a 512 bit message. Just debugging.
-	if (show_distance_from_512bit)
-	{
-		cout << "l: " << l << endl;
-		cout << "k: " << k + 7 << endl; // Plus 7 so this follows the paper.
-	}
-
-	// Just debugging.
-	if (show_distance_from_512bit)
-		cout << "adding " << k / 8 << " empty eight bit blocks!\n";
-
-	// Add 8 bit blocks containing zero's
-	for(int i = 0; i < k / 8; i++)
-		block.push_back(0x00000000);
-
-	// We are now at 488 bits out of 512. We need to add l in the binary
-	// form of eight 8 bit blocks.
-	bitset<64> big_64bit_blob(l);
-	if (show_distance_from_512bit)
-		cout << "l in a 64 bit binary blob: \n\t" << big_64bit_blob << endl;
-	
-	// Split up that 64 bit blob into 8 bit sections.
-	string big_64bit_string = big_64bit_blob.to_string();
-	
-	// Push the first block into the 56th position.
-	bitset<8> temp_string_holder1(big_64bit_string.substr(0,8));
-	block.push_back(temp_string_holder1.to_ulong());
-
-	// Push all the rest of the 8 bit blocks in.
-	for(int i = 8; i < 63; i=i+8)
-	{
-		bitset<8> temp_string_holder2(big_64bit_string.substr(i,8));
-		block.push_back(temp_string_holder2.to_ulong());
-	}
-
-	// Just display everything so we know what is going on.
-	if (show_padding_results)
-	{
-		cout << "Current 512 bit pre-processed hash in binary: \n";
-			for(int i = 0; i < block.size(); i=i+4)
-				cout << i << ": " << show_as_binary(block[i]) << "     " 
-				     << i + 1 << ": " << show_as_binary(block[i+1]) << "     " 
-				     << i + 2 << ": " << show_as_binary(block[i+2]) << "     " 
-				     << i + 3 << ": " << show_as_binary(block[i+3]) << endl;
-
-		cout << "Current 512 bit pre-processed hash in hex: \n";
-		for(int i = 0; i < block.size(); i=i+4)
-			cout << i << ": " << "0x" + show_as_hex(block[i]) << "     " 
-			     << i + 1 << ": " << "0x" + show_as_hex(block[i+1]) << "     " 
-			     << i + 2 << ": " << "0x" + show_as_hex(block[i+2]) << "     " 
-			     << i + 3 << ": " << "0x" + show_as_hex(block[i+3]) << endl;	
-	}
-	return block;
+template <typename InIter>
+void bytes_to_hex_string(InIter first, InIter last, std::string& hex_str) {
+    std::ostringstream oss;
+    output_hex(first, last, oss);
+    hex_str.assign(oss.str());
 }
 
-/* Function : compute_hash
-
-Note:	This is a very long function because a large portion of it is solely
-		debugging assistance. Originally planned to be purged of those but in
-		the end decided to keep them so it will be much easier to debug this
-		in the future.
-Input : The 512 bit padded message as a vector containing 8 bit binary ASCII values.
-Output : A string representing the hash. */
-
-string sha256(string msg) {
-	vector<unsigned long> block;
-	block = convert_to_binary(msg);
-	block = pad_to_512bits(block);
-	block = resize_block(block);
-	string hash = compute_hash(block);
-	return hash;
+template <typename InContainer>
+void bytes_to_hex_string(const InContainer& bytes, std::string& hex_str) {
+    bytes_to_hex_string(bytes.begin(), bytes.end(), hex_str);
 }
 
-string compute_hash(const vector<unsigned long> block)
-{
-	// Taken from the spec
-	//   SHA-224 and SHA-256 use the same sequence of sixty-four constant
-	//   32-bit words, K0, K1, ..., K63.  These words represent the first 32
-	//   bits of the fractional parts of the cube roots of the first sixty-
-	//   four prime numbers.
-	unsigned long k[64] = {
-		0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,
-		0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
-		0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,
-		0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-		0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,
-		0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,
-		0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,
-		0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-		0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,
-		0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
-		0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-	};
-
-	// Initial Hash Values, first thirty-two bits of the fractional parts of
-	// the square roots of the first eight prime numbers. 
-	unsigned long static H0 = 0x6a09e667;
-	unsigned long static H1 = 0xbb67ae85;
-	unsigned long static H2 = 0x3c6ef372;
-	unsigned long static H3 = 0xa54ff53a;
-	unsigned long static H4 = 0x510e527f;
-	unsigned long static H5 = 0x9b05688c;
-	unsigned long static H6 = 0x1f83d9ab;
-	unsigned long static H7 = 0x5be0cd19;
-
-	unsigned long W[64];
-
-	for(int t = 0; t <= 15; t++)
-	{
-		W[t] = block[t] & 0xFFFFFFFF;
-
-		if (show_Wt)
-			cout << "W[" << t << "]: 0x" << show_as_hex(W[t]) << endl;
-	}
-
-	for(int t = 16; t <= 63; t++)
-	{
-		// Also taken from spec.
-		W[t] = SSIG1(W[t-2]) + W[t-7] + SSIG0(W[t-15]) + W[t-16];
-
-		// Have to make sure we are still dealing with 32 bit numbers.
-		W[t] = W[t] & 0xFFFFFFFF;
-
-		if (show_Wt)
-			cout << "W[" << t << "]: " << W[t];
-	}
-
-	unsigned long temp1;
-	unsigned long temp2;
-	unsigned long a = H0;
-	unsigned long b = H1;
-	unsigned long c = H2;
-	unsigned long d = H3;
-	unsigned long e = H4;
-	unsigned long f = H5;
-	unsigned long g = H6;
-	unsigned long h = H7;
-
-	if(show_working_vars_for_t)
-		cout << "         A        B        C        D        "
-		     << "E        F        G        H        T1       T2\n";
-
-	for( int t = 0; t < 64; t++)
-	{
-		// Seems the Official spec is wrong!? BSIG1 is incorrect.
-		// Replacing BSIG1 with EP1.
-		temp1 = h + EP1(e) + CH(e,f,g) + k[t] + W[t];
-		if ((t == 20) & show_T1_calculation)
-		{
-			cout << "h: 0x" << hex << h << "  dec:" << dec << h 
-			     << "  sign:" << dec << (int)h << endl;
-			cout << "EP1(e): 0x" << hex << EP1(e) << "  dec:" 
-			     << dec << EP1(e) << "  sign:" << dec << (int)EP1(e) 
-			     << endl;
-			cout << "CH(e,f,g): 0x" << hex << CH(e,f,g) << "  dec:" 
-			     << dec << CH(e,f,g) << "  sign:" << dec 
-			     << (int)CH(e,f,g) << endl;
-			cout << "k[t]: 0x" << hex << k[t] << "  dec:" << dec 
-			     << k[t] << "  sign:" << dec << (int)k[t] << endl;
-			cout << "W[t]: 0x" << hex << W[t] << "  dec:" << dec 
-			     << W[t] << "  sign:" << dec << (int)W[t] << endl;
-			cout << "temp1: 0x" << hex << temp1 << "  dec:" << dec 
-			     << temp1 << "  sign:" << dec << (int)temp1 << endl;
-		}
-		
-
-		// Seems the Official spec is wrong!? BSIG0 is incorrect.
-		// Replacing BSIG0 with EP0.
-		temp2 = EP0(a) + MAJ(a,b,c);
-
-		// Shows the variables and operations for getting T2.
-		if ((t == 20) & show_T2_calculation)
-		{
-			cout << "a: 0x" << hex << a << "  dec:" << dec << a 
-			     << "  sign:" << dec << (int)a << endl;
-			cout << "b: 0x" << hex << b << "  dec:" << dec << b 
-			     << "  sign:" << dec << (int)b << endl;
-			cout << "c: 0x" << hex << c << "  dec:" << dec << c 
-			     << "  sign:" << dec << (int)c << endl;
-			cout << "EP0(a): 0x" << hex << EP0(a) << "  dec:" 
-			     << dec << EP0(a) << "  sign:" << dec << (int)EP0(a) 
-			     << endl;
-			cout << "MAJ(a,b,c): 0x" << hex << MAJ(a,b,c) << "  dec:" 
-			     << dec << MAJ(a,b,c) << "  sign:" << dec 
-			     << (int)MAJ(a,b,c) << endl;
-			cout << "temp2: 0x" << hex << temp2 << "  dec:" << dec 
-			     << temp2 << "  sign:" << dec << (int)temp2 << endl;
-		}
-
-		// Do the working variables operations as per NIST.
-		h = g;
-		g = f;
-		f = e;
-		e = (d + temp1) & 0xFFFFFFFF; // Makes sure that we are still using 32 bits.
-		d = c;
-		c = b;
-		b = a;
-		a = (temp1 + temp2) & 0xFFFFFFFF; // Makes sure that we are still using 32 bits.
-
-		// Shows the contents of each working variable for the turn T.
-		if (show_working_vars_for_t)
-		{
-			cout << "t= " << t << " ";
-			cout << show_as_hex (a) << " " << show_as_hex (b) << " " 
-			     << show_as_hex (c) << " " << show_as_hex (d) << " " 
-			     << show_as_hex (e) << " " << show_as_hex (f) << " "
-			     << show_as_hex (g) << " " << show_as_hex (h) << " " 
-			     << endl;
-		}
-	}
-
-	// Shows the contents of each hash segment.
-	if(show_hash_segments)
-	{
-		cout << "H0: " << show_as_hex (H0) << " + " << show_as_hex (a)
-			 << " " << show_as_hex (H0 + a) << endl;
-		cout << "H1: " << show_as_hex (H1) << " + " << show_as_hex (b)
-			 << " " << show_as_hex (H1 + b) << endl;
-		cout << "H2: " << show_as_hex (H2) << " + " << show_as_hex (c)
-			 << " " << show_as_hex (H2 + c) << endl;
-		cout << "H3: " << show_as_hex (H3) << " + " << show_as_hex (d)
-			 << " " << show_as_hex (H3 + d) << endl;
-		cout << "H4: " << show_as_hex (H4) << " + " << show_as_hex (e)
-			 << " " << show_as_hex (H4 + e) << endl;
-		cout << "H5: " << show_as_hex (H5) << " + " << show_as_hex (f)
-			 << " " << show_as_hex (H5 + f) << endl;
-		cout << "H6: " << show_as_hex (H6) << " + " << show_as_hex (g)
-			 << " " << show_as_hex (H6 + g) << endl;
-		cout << "H7: " << show_as_hex (H7) << " + " << show_as_hex (h)
-			 << " " << show_as_hex (H7 + h) << endl;
-	}
-
-	// Add up all the working variables to each hash and make sure we are still
-	// working with solely 32 bit variables.
-	H0 = (H0 + a) & 0xFFFFFFFF;
-	H1 = (H1 + b) & 0xFFFFFFFF;
-	H2 = (H2 + c) & 0xFFFFFFFF;
-	H3 = (H3 + d) & 0xFFFFFFFF;
-	H4 = (H4 + e) & 0xFFFFFFFF;
-	H5 = (H5 + f) & 0xFFFFFFFF;
-	H6 = (H6 + g) & 0xFFFFFFFF;
-	H7 = (H7 + h) & 0xFFFFFFFF;
-
-	// Append the hash segments together one after the other to get the full
-	// 256 bit hash.
-	return show_as_hex(H0) + show_as_hex(H1) + show_as_hex(H2) +
-		   show_as_hex(H3) + show_as_hex(H4) + show_as_hex(H5) +
-		   show_as_hex(H6) + show_as_hex(H7);
+template <typename InIter>
+std::string bytes_to_hex_string(InIter first, InIter last) {
+    std::string hex_str;
+    bytes_to_hex_string(first, last, hex_str);
+    return hex_str;
 }
+
+template <typename InContainer>
+std::string bytes_to_hex_string(const InContainer& bytes) {
+    std::string hex_str;
+    bytes_to_hex_string(bytes, hex_str);
+    return hex_str;
+}
+
+class hash256_one_by_one {
+   public:
+    hash256_one_by_one() { init(); }
+
+    void init() {
+        buffer_.clear();
+        std::fill(data_length_digits_, data_length_digits_ + 4, word_t(0));
+        std::copy(detail::initial_message_digest,
+                  detail::initial_message_digest + 8, h_);
+    }
+
+    template <typename RaIter>
+    void process(RaIter first, RaIter last) {
+        add_to_data_length(static_cast<word_t>(std::distance(first, last)));
+        std::copy(first, last, std::back_inserter(buffer_));
+        std::size_t i = 0;
+        for (; i + 64 <= buffer_.size(); i += 64) {
+            detail::hash256_block(h_, buffer_.begin() + i,
+                                  buffer_.begin() + i + 64);
+        }
+        buffer_.erase(buffer_.begin(), buffer_.begin() + i);
+    }
+
+    void finish() {
+        byte_t temp[64];
+        std::fill(temp, temp + 64, byte_t(0));
+        std::size_t remains = buffer_.size();
+        std::copy(buffer_.begin(), buffer_.end(), temp);
+        temp[remains] = 0x80;
+
+        if (remains > 55) {
+            std::fill(temp + remains + 1, temp + 64, byte_t(0));
+            detail::hash256_block(h_, temp, temp + 64);
+            std::fill(temp, temp + 64 - 4, byte_t(0));
+        } else {
+            std::fill(temp + remains + 1, temp + 64 - 4, byte_t(0));
+        }
+
+        write_data_bit_length(&(temp[56]));
+        detail::hash256_block(h_, temp, temp + 64);
+    }
+
+    template <typename OutIter>
+    void get_hash_bytes(OutIter first, OutIter last) const {
+        for (const word_t* iter = h_; iter != h_ + 8; ++iter) {
+            for (std::size_t i = 0; i < 4 && first != last; ++i) {
+                *(first++) = detail::mask_8bit(
+                    static_cast<byte_t>((*iter >> (24 - 8 * i))));
+            }
+        }
+    }
+
+   private:
+    void add_to_data_length(word_t n) {
+        word_t carry = 0;
+        data_length_digits_[0] += n;
+        for (std::size_t i = 0; i < 4; ++i) {
+            data_length_digits_[i] += carry;
+            if (data_length_digits_[i] >= 65536u) {
+                carry = data_length_digits_[i] >> 16;
+                data_length_digits_[i] &= 65535u;
+            } else {
+                break;
+            }
+        }
+    }
+    void write_data_bit_length(byte_t* begin) {
+        word_t data_bit_length_digits[4];
+        std::copy(data_length_digits_, data_length_digits_ + 4,
+                  data_bit_length_digits);
+
+        // convert byte length to bit length (multiply 8 or shift 3 times left)
+        word_t carry = 0;
+        for (std::size_t i = 0; i < 4; ++i) {
+            word_t before_val = data_bit_length_digits[i];
+            data_bit_length_digits[i] <<= 3;
+            data_bit_length_digits[i] |= carry;
+            data_bit_length_digits[i] &= 65535u;
+            carry = (before_val >> (16 - 3)) & 65535u;
+        }
+
+        // write data_bit_length
+        for (int i = 3; i >= 0; --i) {
+            (*begin++) = static_cast<byte_t>(data_bit_length_digits[i] >> 8);
+            (*begin++) = static_cast<byte_t>(data_bit_length_digits[i]);
+        }
+    }
+    std::vector<byte_t> buffer_;
+    word_t data_length_digits_[4];  // as 64bit integer (16bit x 4 integer)
+    word_t h_[8];
+};
+
+inline void get_hash_hex_string(const hash256_one_by_one& hasher,
+                                std::string& hex_str) {
+    byte_t hash[k_digest_size];
+    hasher.get_hash_bytes(hash, hash + k_digest_size);
+    return bytes_to_hex_string(hash, hash + k_digest_size, hex_str);
+}
+
+inline std::string get_hash_hex_string(const hash256_one_by_one& hasher) {
+    std::string hex_str;
+    get_hash_hex_string(hasher, hex_str);
+    return hex_str;
+}
+
+namespace impl {
+template <typename RaIter, typename OutIter>
+void hash256_impl(RaIter first, RaIter last, OutIter first2, OutIter last2, int,
+                  std::random_access_iterator_tag) {
+    hash256_one_by_one hasher;
+    // hasher.init();
+    hasher.process(first, last);
+    hasher.finish();
+    hasher.get_hash_bytes(first2, last2);
+}
+
+template <typename InputIter, typename OutIter>
+void hash256_impl(InputIter first, InputIter last, OutIter first2,
+                  OutIter last2, int buffer_size, std::input_iterator_tag) {
+    std::vector<byte_t> buffer(buffer_size);
+    hash256_one_by_one hasher;
+    // hasher.init();
+    while (first != last) {
+        int size = buffer_size;
+        for (int i = 0; i != buffer_size; ++i, ++first) {
+            if (first == last) {
+                size = i;
+                break;
+            }
+            buffer[i] = *first;
+        }
+        hasher.process(buffer.begin(), buffer.begin() + size);
+    }
+    hasher.finish();
+    hasher.get_hash_bytes(first2, last2);
+}
+}
+
+template <typename InIter, typename OutIter>
+void hash256(InIter first, InIter last, OutIter first2, OutIter last2,
+             int buffer_size = PICOSHA2_BUFFER_SIZE_FOR_INPUT_ITERATOR) {
+    picosha2::impl::hash256_impl(
+        first, last, first2, last2, buffer_size,
+        typename std::iterator_traits<InIter>::iterator_category());
+}
+
+template <typename InIter, typename OutContainer>
+void hash256(InIter first, InIter last, OutContainer& dst) {
+    hash256(first, last, dst.begin(), dst.end());
+}
+
+template <typename InContainer, typename OutIter>
+void hash256(const InContainer& src, OutIter first, OutIter last) {
+    hash256(src.begin(), src.end(), first, last);
+}
+
+template <typename InContainer, typename OutContainer>
+void hash256(const InContainer& src, OutContainer& dst) {
+    hash256(src.begin(), src.end(), dst.begin(), dst.end());
+}
+
+template <typename InIter>
+void hash256_hex_string(InIter first, InIter last, std::string& hex_str) {
+    byte_t hashed[k_digest_size];
+    hash256(first, last, hashed, hashed + k_digest_size);
+    std::ostringstream oss;
+    output_hex(hashed, hashed + k_digest_size, oss);
+    hex_str.assign(oss.str());
+}
+
+template <typename InIter>
+std::string hash256_hex_string(InIter first, InIter last) {
+    std::string hex_str;
+    hash256_hex_string(first, last, hex_str);
+    return hex_str;
+}
+
+inline void hash256_hex_string(const std::string& src, std::string& hex_str) {
+    hash256_hex_string(src.begin(), src.end(), hex_str);
+}
+
+template <typename InContainer>
+void hash256_hex_string(const InContainer& src, std::string& hex_str) {
+    hash256_hex_string(src.begin(), src.end(), hex_str);
+}
+
+template <typename InContainer>
+std::string hash256_hex_string(const InContainer& src) {
+    return hash256_hex_string(src.begin(), src.end());
+}
+template<typename OutIter>void hash256(std::ifstream& f, OutIter first, OutIter last){
+    hash256(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>(), first,last);
+
+}
+}// namespace picosha2
+#endif  // PICOSHA2_H

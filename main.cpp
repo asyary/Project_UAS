@@ -6,6 +6,7 @@
 #include <conio.h>
 #include <windows.h>
 #include <signal.h>
+#include <vector>
 #include <iomanip>
 #include "include/sha256.h"
 
@@ -20,7 +21,6 @@ struct UserData {
 	string hashPin;
 	string level;
 	double saldo;
-	double pinjaman;
 };
 
 struct MasterData {
@@ -29,13 +29,14 @@ struct MasterData {
 	string hashPin;
 };
 
-MasterData* user;
+MasterData* users;
 
 void greet();
 void login();
 void daftar();
 char optionHandler();
 bool isQuit = false, doneLoading = false;
+int totalUser = 0;
 
 void loadingScr() {
 	char spinner[4] = {'|', '/', '-', '\\'};
@@ -49,26 +50,44 @@ void loadingScr() {
 }
 
 void readMasterData() {
-
+	ifstream baca("./data/master.txt");
+	if (baca.fail()) {
+		return exit(0); // Waduh
+	}
+	int total;
+	baca >> total;
+	totalUser = total;
+	users = new MasterData[total];
+	for (int i = 0; i < total; i++) {
+		baca >> users[i].id;
+		baca >> users[i].user;
+		baca >> users[i].hashPin;
+	}
+	baca.close();
+	return;
 }
 
 void ShowConsoleCursor(bool showFlag) {
 	HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-
 	CONSOLE_CURSOR_INFO cursorInfo;
-
 	GetConsoleCursorInfo(out, &cursorInfo);
 	cursorInfo.bVisible = showFlag;
 	SetConsoleCursorInfo(out, &cursorInfo);
 }
 
 void init() {
+	system("cls");
 	ShowConsoleCursor(false);
 	thread t1(loadingScr);
 	thread t2(readMasterData);
+	thread t3([]() { // lambda function
+		sleep_for(milliseconds(2000));
+		doneLoading = true;
+		ShowConsoleCursor(true);
+	});
 	t1.join();
 	t2.join();
-	ShowConsoleCursor(true);
+	t3.join();
 	return greet();
 }
 
@@ -153,36 +172,47 @@ char optionHandler() {
 string hashAlgo(string *user, string *pass) {
 	minstd_rand generator(stoi(*pass));
 	string toHash = *user + *pass + to_string(generator());
-	cout << toHash << "\n";
-	// Implementasi SHA256 ini breaks down pada 55 character
-	string hashed = sha256(toHash);
+	vector<unsigned char> hash(picosha2::k_digest_size);
+	picosha2::hash256(toHash.begin(), toHash.end(), hash.begin(), hash.end());
+	string hashed = picosha2::bytes_to_hex_string(hash.begin(), hash.end());
 	return hashed;
 }
 
-bool checkUser(string *user) {
-	if (*user == "\0") {
-		exit(0);
-	}
+int checkUser(string *user) {
 	if (user->length() == 0) {
 		errorHandler("Username tidak boleh kosong!");
-		return false;
+		return -1;
 	} else if (user->length() > 20) {
 		errorHandler("Username terlalu panjang!");
-		return false;
+		return -1;
 	}
+	for (int i = 0; i < totalUser; i++) {
+		if (users[i].user == *user) {
+			return i;
+		}
+	}
+	errorHandler("Username tidak ditemukan!");
+	return -1;
 }
 
-bool validate(string nama, string hash) {
-
+bool validate(string nama, string hash, int check) {
+	if (users[check].user == nama && users[check].hashPin == hash) {
+		return true;
+	} else {
+		return false;
+	}
 }
 
 void login() {
 	system("cls");
 	cout << "==== Login ====\n\n";
-	string user = "\0";
+	string user = "";
 	cout << "Username : ";
-	getline(cin, user);
-	if (!checkUser(&user)) {
+	if (!getline(cin, user)) {
+		return;
+	}
+	int check = checkUser(&user);
+	if (check == -1) {
 		return login();
 	}
 	string pass = "";
@@ -196,6 +226,8 @@ void login() {
 				pass.pop_back();
 			}
 			continue;
+		} else if (ch == 3) {
+			quit();
 		} else if (ch < 48 || ch > 57) {
 			continue;
 		}
@@ -203,9 +235,13 @@ void login() {
 		cout << '*';
 	}
 	string hashed = hashAlgo(&user, &pass);
-	cout << hashed;
-	cin >> ch;
-	validate(user, hashed);
+	if (validate(user, hashed, check)) {
+		cout << "gas";
+		cin >> ch;
+	} else {
+		errorHandler("Pin salah!");
+		return login();
+	}
 }
 
 void daftar() {
@@ -215,5 +251,5 @@ void daftar() {
 int main() {
 	atexit(quit);
 	signal(SIGINT, exit);
-	greet();
+	init();
 }
