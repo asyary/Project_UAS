@@ -246,29 +246,39 @@ void logTransaksi() {
 	return menu(2);
 }
 
-void alterSaldo(string aksi, double jumlah) {
+void alterSaldo(string aksi, double jumlah, string towhom = "") {
+	if (towhom.length() > 0 || aksi == "Kirim") {
+		towhom = currentUser.user + "->" + towhom;
+	} else {
+		towhom = aksi;
+	}
 	currentUser.saldo += jumlah;
-	currentUser.log[currentUser.jmlLog].dari = aksi;
+	currentUser.log[currentUser.jmlLog].dari = towhom;
 	currentUser.log[currentUser.jmlLog].jumlah = jumlah;
 	currentUser.jmlLog += 1;
 	ofstream tulis("./userdata/" + currentUser.user + "/data.txt", ios::trunc);
 	tulis << currentUser.id << "\n" << currentUser.nama << "\n" << currentUser.user << "\n" << currentUser.hashPin
 	<< "\n" << currentUser.level << "\n" << fixed << setprecision(2) << currentUser.saldo;
 	tulis.close();
+
 	ofstream tulisLog("./userdata/" + currentUser.user + "/log.txt", ios::trunc);
 	tulisLog << currentUser.jmlLog;
-	for (int i = 0; i < currentUser.jmlLog-1; i++) {
+	currentUser.log[currentUser.jmlLog-1].dari = towhom;
+	currentUser.log[currentUser.jmlLog-1].jumlah = jumlah;
+	for (int i = 0; i < currentUser.jmlLog; i++) {
 		tulisLog << "\n\n" << currentUser.log[i].dari << "\n" << fixed << setprecision(2) << currentUser.log[i].jumlah;
 	}
-	tulisLog << "\n\n" + aksi << "\n" << fixed << setprecision(2) << jumlah;
 	tulisLog.close();
+	
 	ofstream tulisLogMaster("./data/log.txt");
+	logs[totalLog].user = currentUser.user;
+	logs[totalLog].dari = towhom;
+	logs[totalLog].jumlah = jumlah;
 	totalLog += 1;
 	tulisLogMaster << totalLog;
-	for (int i = 0; i < totalLog-1; i++) {
-		tulisLogMaster << "\n\n" << logs[i].user << "\n" << logs[i].dari << "\n" << logs[i].jumlah;
+	for (int i = 0; i < totalLog; i++) {
+		tulisLogMaster << "\n\n" << logs[i].user << "\n" << logs[i].dari << "\n" << fixed << setprecision(2) << logs[i].jumlah;
 	}
-	tulisLogMaster << "\n\n" + currentUser.user + "\n" + aksi + "\n" << fixed << setprecision(2) << jumlah;
 	tulisLogMaster.close();
 }
 
@@ -318,7 +328,50 @@ void deposit(string jumlah = "") {
 
 void withdraw() {
 	system("cls");
-
+	// Literally just copy and paste the one above WKWK
+	string teks = "==== Withdraw ====\n\nMasukkan jumlah uang : Rp. ";
+	cout << teks;
+	string uang, uangPretty;
+	int uangDesimal;
+	char num;
+	while (num != 13) {
+		num = optionHandler();
+		system("cls");
+		if (num == 8 && uang.length() > 0) {
+			if (!uang.empty()) {
+				uang.pop_back();
+			}
+			if (uang.length() == 0) {
+				uang = "0";
+			}
+			treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+			cout << teks << uangPretty;
+			continue;
+		} else if (num < 48 || num > 57) {
+			cout << teks << uangPretty;
+			continue;
+		}
+		uang += num;
+		treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+		cout << teks << uangPretty;
+	}
+	if (stoi(uang) > currentUser.saldo) {
+		errorHandler("Tidak bisa withdraw lebih daripada saldo!");
+		return withdraw();
+	}
+	system("cls");
+	cout << "==== Konfirmasi ====\n\nAnda akan withdraw uang sebesar Rp. " + uangPretty + "\n\nY/N : ";
+	char chC = 0;
+	while (!(chC == 'y' || chC == 'Y' || chC == 'n' || chC == 'N')) {
+		chC = optionHandler();
+	}
+	if (chC == 'y' || chC == 'Y') {
+		alterSaldo("Withdraw", -stoi(uang));
+		system("cls");
+		cout << "==== Berhasil ====\n\nWithdraw senilai Rp. " + uangPretty + " telah selesai\n\n";
+		system("pause");
+	}
+	return menu(2);
 }
 
 void kirimUang() {
