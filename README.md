@@ -37,5 +37,5 @@ g++ Kelompok3_SistemBank_150_180_156 -o Kelompok3_SistemBank_150_180_156; ./Kelo
 
 ### Sidenote
 
-> ``📝`` Hanya compatible untuk windows
+> ``📝`` Hanya compatible untuk windows\
 > ``📝`` Default login admin dengan pin 123456
