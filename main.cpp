@@ -15,6 +15,17 @@ using namespace std;
 using namespace std::chrono;
 using namespace std::this_thread;
 
+struct MasterData {
+	int id;
+	string user;
+	string hashPin;
+};
+
+struct UserLog {
+	string dari;
+	double jumlah;
+};
+
 struct UserData {
 	int id;
 	string nama;
@@ -22,21 +33,12 @@ struct UserData {
 	string hashPin;
 	string level;
 	double saldo;
+	int jmlLog;
+	UserLog* log;
 } currentUser;
 
-struct UserLog {
-	string dari;
-	double jumlah;
-};
-
-struct MasterData {
-	int id;
-	string user;
-	string hashPin;
-};
-
 MasterData* users;
-UserLog* currentLog;
+UserLog* logs;
 
 void greet();
 void login();
@@ -45,7 +47,7 @@ void menu(int num);
 void errorHandler(string err);
 char optionHandler();
 bool isQuit = false, doneLoading = false;
-int totalUser = 0;
+int totalUser = 0, totalLog;
 double bunga;
 
 void loadingScr() {
@@ -75,18 +77,33 @@ void readMasterData() {
 		baca >> users[i].hashPin;
 	}
 	baca.close();
+	ifstream bacaLog("./data/log.txt");
+	bacaLog >> totalLog;
+	logs = new UserLog[totalLog];
+	for (int i = 0; i < totalLog; i++) {
+		bacaLog >> logs[i].dari;
+		bacaLog >> logs[i].jumlah;
+	}
+	bacaLog.close();
 	return;
 }
 
 void readUserData(string user) {
 	ifstream baca("./userdata/" + user + "/data.txt");
 	ifstream bacaLog("./userdata/" + user + "/log.txt");
-	if (baca.fail()) {
+	if (baca.fail() || bacaLog.fail()) {
 		return errorHandler("Error membaca data user!");
 	}
 	baca >> currentUser.id >> currentUser.nama >> currentUser.user
 	>> currentUser.hashPin >> currentUser.level >> currentUser.saldo;
+	bacaLog >> currentUser.jmlLog;
+	currentUser.log = new UserLog[currentUser.jmlLog];
+	for (int i = 0; i < currentUser.jmlLog; i++) {
+		bacaLog >> currentUser.log[i].dari;
+		bacaLog >> currentUser.log[i].jumlah;
+	}
 	baca.close();
+	bacaLog.close();
 	return;
 }
 
@@ -124,11 +141,19 @@ void quit() {
 void treatAngka(double saldo, string* saldoStr, int* desimal) {
 	int newSaldo = saldo; // reminder to always round by 2 decimal places
 	*saldoStr = to_string(newSaldo); // always setw(2) << setfill('0')
+	bool isNegatif = false;
+	if ((*saldoStr)[0] == '-') {
+		isNegatif = true;
+		saldoStr->erase(0, 1);
+	}
 	int saldoLen = saldoStr->length();
 	int jarak = 3;
 	while (saldoLen > jarak) {
 		saldoStr->insert(saldoLen - jarak, 1, '.');
 		jarak += 4; saldoLen += 1;
+	}
+	if (isNegatif) {
+		saldoStr->insert(0, "-");
 	}
 	*desimal = (double)round((saldo - newSaldo)*100);
 	return;
@@ -196,18 +221,33 @@ void bungaSaldo() {
 }
 
 void logTransaksi() {
-
+	system("cls");
+	cout << "==== Log Transaksi ====\n\n";
+	if (currentUser.jmlLog == 0) {
+		cout << "Tidak ada record!\n\n";
+	}
+	for (int i = 0; i < currentUser.jmlLog; i++) {
+		string jumlah;
+		int jumlahDesimal;
+		treatAngka(currentUser.log[i].jumlah, &jumlah, &jumlahDesimal);
+		cout << currentUser.log[i].dari << "\nRp. " + jumlah + "," << setw(2) << setfill('0') << jumlahDesimal << "\n\n";
+	}
+	system("pause");
+	return menu(2);
 }
 
 void deposit() {
+	system("cls");
 
 }
 
 void withdraw() {
+	system("cls");
 
 }
 
 void kirimUang() {
+	system("cls");
 
 }
 
