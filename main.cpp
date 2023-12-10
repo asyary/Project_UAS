@@ -98,8 +98,11 @@ void readUserData(string user) {
 	if (baca.fail() || bacaLog.fail()) {
 		return errorHandler("Error membaca data user!");
 	}
-	baca >> currentUser.id >> currentUser.nama >> currentUser.user
-	>> currentUser.hashPin >> currentUser.level >> currentUser.saldo;
+	baca >> currentUser.id;
+	baca.ignore();
+	getline(baca, currentUser.nama);
+	baca >> currentUser.user >> currentUser.hashPin
+	>> currentUser.level >> currentUser.saldo;
 	bacaLog >> currentUser.jmlLog;
 	currentUser.log = new UserLog[currentUser.jmlLog+10];
 	for (int i = 0; i < currentUser.jmlLog; i++) {
@@ -241,10 +244,47 @@ void logTransaksi() {
 	return menu(2);
 }
 
-void deposit() {
+void alterSaldo(UserData userData, string aksi, double jumlah) {
+	
+}
+
+void deposit(string jumlah = "") {
 	system("cls");
 	// For every transaksi, jangan lupa tambahin data ke semua variable (termasuk in program)
+	string teks = "==== Deposit ====\n\nMasukkan jumlah uang : Rp. ";
+	cout << teks;
+	string uang, uangPretty;
+	int uangDesimal;
+	char num;
+	while (num != 13) {
+		num = optionHandler();
+		system("cls");
+		if (num == 8 && uang.length() > 0) {
+			if (!uang.empty()) {
+				uang.pop_back();
+			}
+			if (uang.length() == 0) {
+				uang = "0";
+			}
+			treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+			cout << teks << uangPretty;
+			continue;
+		} else if (num < 48 || num > 57) {
+			cout << teks << uangPretty;
+			continue;
+		}
+		uang += num;
+		treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+		cout << teks << uangPretty;
+	}
+	cout << "==== Konfirmasi ====\n\nAnda akan deposit uang sebesar " + uangPretty + "\n\nY/N : ";
+	char chC = 0;
+	while (chC != 121 || chC != 110 || chC != 89 || chC != 78) {
+		chC = optionHandler();
+	}
+	if (chC == 89 || chC == 121) {
 
+	}
 }
 
 void withdraw() {
@@ -254,6 +294,24 @@ void withdraw() {
 
 void kirimUang() {
 	system("cls");
+	string user = "";
+	char ch;
+	while (ch != 13) {
+		ch = optionHandler();
+		if (ch == 8 && user.length() > 0) {
+			cout << "\b \b";
+			if (!user.empty()) {
+				user.pop_back();
+			}
+			continue;
+		} else if (ch < 97 || ch > 122) {
+			continue;
+		}
+		if (user.length() < 20) {
+			user += ch;
+			cout << ch;
+		}
+	}
 
 }
 
@@ -518,6 +576,11 @@ void initUser(string nama, string user, string hashPin, string level = "user") {
 	ofstream tulisUser("./data/usermaster.txt", ios::app);
 	tulisUser << "\n\n" << totalUser << "\n" << user << "\n" << hashPin;
 	tulisUser.close();
+	string path = ".\\userdata\\" + user;
+	string mkdirPathCmd = "mkdir " + path;
+	char charmkdir[50];
+	strcpy(charmkdir, mkdirPathCmd.c_str());
+	system(charmkdir);
 	ofstream tulisUserData("./userdata/" + user + "/data.txt");
 	ofstream tulisUserLog("./userdata/" + user + "/log.txt");
 	tulisUserData << totalUser << "\n" << nama << "\n" << user << "\n" << hashPin
@@ -525,6 +588,8 @@ void initUser(string nama, string user, string hashPin, string level = "user") {
 	tulisUserLog << 0;
 	tulisUserData.close();
 	tulisUserLog.close();
+	doneReading = true;
+	return;
 }
 
 void daftar(string nama, string user, string level) {
@@ -635,6 +700,12 @@ void daftar(string nama, string user, string level) {
 	i2.join();
 	i3.join();
 	ShowConsoleCursor(true);
+	doneLoading = false;
+	doneReading = false;
+	system("cls");
+	cout << "==== DONE ====\n\nSilakan login menggunakan akun anda\n\n";
+	system("pause");
+	return menu(1);
 }
 
 int main() {
