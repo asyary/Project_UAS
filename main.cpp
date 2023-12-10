@@ -48,6 +48,7 @@ void daftar(string nama = "", string user = "", string level = "user");
 void menu(int num);
 void errorHandler(string err);
 char optionHandler();
+bool checkNameAvailability(string user);
 bool isQuit = false, doneLoading = false, doneReading = false;
 int totalUser, totalLog;
 double bunga;
@@ -246,6 +247,40 @@ void logTransaksi() {
 	return menu(2);
 }
 
+void loglessAlterSaldo(double jumlah, string towhom) {
+	ifstream baca("./userdata/" + towhom + "/data.txt");
+	ifstream bacaLog("./userdata/" + towhom + "/log.txt");
+	UserData tempToWhom;
+	baca >> tempToWhom.id;
+	baca.ignore();
+	getline(baca, tempToWhom.nama);
+	baca >> tempToWhom.user >> tempToWhom.hashPin
+	>> tempToWhom.level >> tempToWhom.saldo;
+	bacaLog >> tempToWhom.jmlLog;
+	tempToWhom.jmlLog += 1;
+	tempToWhom.log = new UserLog[tempToWhom.jmlLog];
+	for (int i = 0; i < tempToWhom.jmlLog-1; i++) {
+		bacaLog >> tempToWhom.log[i].dari;
+		bacaLog >> tempToWhom.log[i].jumlah;
+	}
+	baca.close();
+	bacaLog.close();
+
+	tempToWhom.saldo += jumlah;
+	ofstream tulis("./userdata/" + tempToWhom.user + "/data.txt", ios::trunc);
+	tulis << tempToWhom.id << "\n" << tempToWhom.nama << "\n" << tempToWhom.user << "\n" << tempToWhom.hashPin
+	<< "\n" << tempToWhom.level << "\n" << fixed << setprecision(2) << tempToWhom.saldo;
+	tulis.close();
+	ofstream tulisLog("./userdata/" + tempToWhom.user + "/log.txt", ios::trunc);
+	tulisLog << tempToWhom.jmlLog;
+	tempToWhom.log[tempToWhom.jmlLog-1].dari = currentUser.user + "->" + towhom;
+	tempToWhom.log[tempToWhom.jmlLog-1].jumlah = jumlah;
+	for (int i = 0; i < tempToWhom.jmlLog; i++) {
+		tulisLog << "\n\n" << tempToWhom.log[i].dari << "\n" << fixed << setprecision(2) << tempToWhom.log[i].jumlah;
+	}
+	tulisLog.close();
+}
+
 void alterSaldo(string aksi, double jumlah, string towhom = "") {
 	if (towhom.length() > 0 || aksi == "Kirim") {
 		towhom = currentUser.user + "->" + towhom;
@@ -280,6 +315,7 @@ void alterSaldo(string aksi, double jumlah, string towhom = "") {
 		tulisLogMaster << "\n\n" << logs[i].user << "\n" << logs[i].dari << "\n" << fixed << setprecision(2) << logs[i].jumlah;
 	}
 	tulisLogMaster.close();
+	return;
 }
 
 void deposit(string jumlah = "") {
@@ -374,27 +410,74 @@ void withdraw() {
 	return menu(2);
 }
 
-void kirimUang() {
+void kirimUang(string towhom = "") {
 	system("cls");
-	string user = "";
-	char ch;
-	while (ch != 13) {
-		ch = optionHandler();
-		if (ch == 8 && user.length() > 0) {
-			cout << "\b \b";
-			if (!user.empty()) {
-				user.pop_back();
+	string tks = "==== Kirim Uang ====\n\nMasukkan username yang ingin dikirim : ";
+	cout << tks;
+	if (towhom.length() > 0) {
+		cout << towhom + "\n\n";
+	} else {
+		string user = "";
+		char ch;
+		while (ch != 13) {
+			ch = optionHandler();
+			if (ch == 8 && user.length() > 0) {
+				cout << "\b \b";
+				if (!user.empty()) {
+					user.pop_back();
+				}
+				continue;
+			} else if (ch < 97 || ch > 122) {
+				continue;
 			}
-			continue;
-		} else if (ch < 97 || ch > 122) {
-			continue;
+			if (user.length() < 20) {
+				user += ch;
+				cout << ch;
+			}
 		}
-		if (user.length() < 20) {
-			user += ch;
-			cout << ch;
+		if (checkNameAvailability(user)) {
+			errorHandler("Username " + user + " tidak dapat ditemukan!");
+			return kirimUang();
 		}
+		towhom = user;
 	}
-
+	system("cls");
+	string teks = tks + towhom + "\n\nMasukkan jumlah uang : Rp. ";
+	cout << teks;
+	string uang, uangPretty;
+	int uangDesimal;
+	char num;
+	while (num != 13) {
+		num = optionHandler();
+		system("cls");
+		if (num == 8 && uang.length() > 0) {
+			if (!uang.empty()) {
+				uang.pop_back();
+			}
+			if (uang.length() == 0) {
+				uang = "0";
+			}
+			treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+			cout << teks << uangPretty;
+			continue;
+		} else if (num < 48 || num > 57) {
+			cout << teks << uangPretty;
+			continue;
+		}
+		uang += num;
+		treatAngka(stoi(uang), &uangPretty, &uangDesimal);
+		cout << teks << uangPretty;
+	}
+	if (stoi(uang) > currentUser.saldo) {
+		errorHandler("Tidak bisa kirim lebih daripada saldo!");
+		return kirimUang(towhom);
+	}
+	system("cls");
+	alterSaldo("Kirim", -stoi(uang), towhom);
+	loglessAlterSaldo(stoi(uang), towhom);
+	cout << "==== Berhasil ====\n\nUang berhasil dikirim senilai Rp. " + uangPretty + " ke " + towhom + "\n\n";
+	system("pause");
+	return menu(2);
 }
 
 void menu(int num) {
