@@ -25,6 +25,7 @@ struct MasterData {
 struct UserLog {
 	string dari;
 	double jumlah;
+	string user;
 };
 
 struct UserData {
@@ -84,6 +85,7 @@ void readMasterData() {
 	bacaLog >> totalLog;
 	logs = new UserLog[totalLog+10];
 	for (int i = 0; i < totalLog; i++) {
+		bacaLog >> logs[i].user;
 		bacaLog >> logs[i].dari;
 		bacaLog >> logs[i].jumlah;
 	}
@@ -244,8 +246,30 @@ void logTransaksi() {
 	return menu(2);
 }
 
-void alterSaldo(UserData userData, string aksi, double jumlah) {
-	
+void alterSaldo(string aksi, double jumlah) {
+	currentUser.saldo += jumlah;
+	currentUser.log[currentUser.jmlLog].dari = aksi;
+	currentUser.log[currentUser.jmlLog].jumlah = jumlah;
+	currentUser.jmlLog += 1;
+	ofstream tulis("./userdata/" + currentUser.user + "/data.txt", ios::trunc);
+	tulis << currentUser.id << "\n" << currentUser.nama << "\n" << currentUser.user << "\n" << currentUser.hashPin
+	<< "\n" << currentUser.level << "\n" << fixed << setprecision(2) << currentUser.saldo;
+	tulis.close();
+	ofstream tulisLog("./userdata/" + currentUser.user + "/log.txt", ios::trunc);
+	tulisLog << currentUser.jmlLog;
+	for (int i = 0; i < currentUser.jmlLog-1; i++) {
+		tulisLog << "\n\n" << currentUser.log[i].dari << "\n" << fixed << setprecision(2) << currentUser.log[i].jumlah;
+	}
+	tulisLog << "\n\n" + aksi << "\n" << fixed << setprecision(2) << jumlah;
+	tulisLog.close();
+	ofstream tulisLogMaster("./data/log.txt");
+	totalLog += 1;
+	tulisLogMaster << totalLog;
+	for (int i = 0; i < totalLog-1; i++) {
+		tulisLogMaster << "\n\n" << logs[i].user << "\n" << logs[i].dari << "\n" << logs[i].jumlah;
+	}
+	tulisLogMaster << "\n\n" + currentUser.user + "\n" + aksi + "\n" << fixed << setprecision(2) << jumlah;
+	tulisLogMaster.close();
 }
 
 void deposit(string jumlah = "") {
@@ -277,14 +301,19 @@ void deposit(string jumlah = "") {
 		treatAngka(stoi(uang), &uangPretty, &uangDesimal);
 		cout << teks << uangPretty;
 	}
-	cout << "==== Konfirmasi ====\n\nAnda akan deposit uang sebesar " + uangPretty + "\n\nY/N : ";
+	system("cls");
+	cout << "==== Konfirmasi ====\n\nAnda akan deposit uang sebesar Rp. " + uangPretty + "\n\nY/N : ";
 	char chC = 0;
-	while (chC != 121 || chC != 110 || chC != 89 || chC != 78) {
+	while (!(chC == 'y' || chC == 'Y' || chC == 'n' || chC == 'N')) {
 		chC = optionHandler();
 	}
-	if (chC == 89 || chC == 121) {
-
+	if (chC == 'y' || chC == 'Y') {
+		alterSaldo("Deposit", stoi(uang));
+		system("cls");
+		cout << "==== Berhasil ====\n\nDeposit senilai Rp. " + uangPretty + " telah selesai\n\n";
+		system("pause");
 	}
+	return menu(2);
 }
 
 void withdraw() {
@@ -316,9 +345,9 @@ void kirimUang() {
 }
 
 void menu(int num) {
+	system("cls");
 	switch (num) {
 		case 1: { // main menu
-			system("cls");
 			string mainMenu = "==== Selamat Datang ====\n\n1. Login\n2. Daftar\n0. Keluar\n\n";
 			cout << mainMenu << "Masukkan pilihan : ";
 			char pil = '\0';
@@ -346,7 +375,6 @@ void menu(int num) {
 			break;
 
 		case 2: { // menu after logged in
-			system("cls");
 			cout << "==== Selamat datang, " + currentUser.nama + " ====\n\n";
 			cout << "1. Informasi akun\n2. Transaksi\n0. Keluar\n\nMasukkan pilihan : ";
 			char pil = '\0';
@@ -374,7 +402,6 @@ void menu(int num) {
 			break;
 
 		case 3: { // menu informasi
-			system("cls");
 			cout << "==== Informasi Akun ====\n\n1. Jumlah saldo\n2. Perkiraan saldo\n3. Log transaksi\n0. Kembali";
 			cout << "\n\nMasukkan pilihan : ";
 			char pil = '\0';
@@ -408,7 +435,6 @@ void menu(int num) {
 			break;
 
 		case 4: { // menu informasi
-			system("cls");
 			cout << "==== Transaksi ====\n\n1. Deposit\n2. Withdraw\n3. Kirim uang\n0. Kembali";
 			cout << "\n\nMasukkan pilihan : ";
 			char pil = '\0';
