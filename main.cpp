@@ -24,6 +24,11 @@ struct UserData {
 	double saldo;
 } currentUser;
 
+struct UserLog {
+	string dari;
+	double jumlah;
+};
+
 struct MasterData {
 	int id;
 	string user;
@@ -271,7 +276,7 @@ void menu(int num) {
 				default:
 					cout << "Pilihan invalid!\n";
 					system("pause");
-					menu(3);
+					menu(4);
 					break;
 			}}
 			break;
