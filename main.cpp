@@ -47,8 +47,12 @@ void login();
 void daftar(string nama = "", string user = "", string level = "user");
 void menu(int num);
 void errorHandler(string err);
+void quit();
+void treatAngka(double saldo, string* saldoStr, int* desimal);
 char optionHandler();
 bool checkNameAvailability(string user);
+string hashAlgo(string *user, string *pass);
+
 bool isQuit = false, doneLoading = false, doneReading = false;
 int totalUser, totalLog;
 double bunga;
@@ -93,6 +97,176 @@ void readMasterData() {
 	bacaLog.close();
 	doneReading = true;
 	return;
+}
+
+UserData cariUser(string user) {
+	ifstream baca("./userdata/" + user + "/data.txt");
+	ifstream bacaLog("./userdata/" + user + "/log.txt");
+	UserData newUser;
+	baca >> newUser.id;
+	baca.ignore();
+	getline(baca, newUser.nama);
+	baca >> newUser.user >> newUser.hashPin
+	>> newUser.level >> newUser.saldo;
+	bacaLog >> newUser.jmlLog;
+	newUser.log = new UserLog[newUser.jmlLog+10];
+	for (int i = 0; i < newUser.jmlLog; i++) {
+		bacaLog >> newUser.log[i].dari;
+		bacaLog >> newUser.log[i].jumlah;
+	}
+	baca.close();
+	bacaLog.close();
+	return newUser;
+}
+
+void ubahPasswordFr(string user, string pass, UserData newUser) {
+	string hashed = hashAlgo(&user, &pass);
+	// Change userdata/user/data.txt and data/usermaster.txt
+	ofstream tulis("./userdata/" + user + "/data.txt", ios::trunc);
+	tulis << newUser.id << "\n" << newUser.nama << "\n" << newUser.user << "\n"
+	<< hashed << "\n" << newUser.level << "\n" << fixed << setprecision(2) << newUser.saldo;
+	tulis.close();
+	ofstream tulisMaster("./data/usermaster.txt", ios::trunc);
+	for (int i = 0; i < totalUser; i++) {
+		tulisMaster << users[i].id << "\n" << users[i].user << "\n";
+		if (users[i].user == user) {
+			tulisMaster << hashed;
+		} else {
+			tulisMaster << users[i].hashPin;
+		}
+		if (i != totalUser-1) {
+			tulisMaster << "\n\n";
+		}
+	}
+	return;
+}
+
+void ubahPassword(string user = "") {
+	system("cls");
+	cout << "==== Ubah Password ====\n\nMasukkan username : ";
+	if (user.length() > 0) {
+		cout << user;
+	} else {
+		char ch;
+		while (ch != 13) {
+			ch = optionHandler();
+			if (ch == 8 && user.length() > 0) {
+				cout << "\b \b";
+				if (!user.empty()) {
+					user.pop_back();
+				}
+				continue;
+			} else if (ch < 97 || ch > 122) {
+				continue;
+			}
+			if (user.length() < 20) {
+				user += ch;
+				cout << ch;
+			}
+		}
+		if (checkNameAvailability(user)) {
+			errorHandler("Username tidak ditemukan!");
+			return ubahPassword();
+		}
+	}
+	UserData newUser = cariUser(user);
+	cout << "\nMasukkan password (6 digit pin) \t: ";
+	string pass = "";
+	char chPass;
+	while (pass.length() < 6) {
+		chPass = _getch();
+		if (chPass == 8 && pass.length() > 0) {
+			cout << "\b \b";
+			if (!pass.empty()) {
+				pass.pop_back();
+			}
+			continue;
+		} else if (chPass == 3) {
+			quit();
+		} else if (chPass < 48 || chPass > 57) {
+			continue;
+		}
+		pass += chPass;
+		cout << '*';
+	}
+	cout << "\nMasukkan ulang password (6 digit pin) \t: ";
+	string pass2 = "";
+	char chPass2;
+	while (pass2.length() < 6) {
+		chPass2 = _getch();
+		if (chPass2 == 8 && pass2.length() > 0) {
+			cout << "\b \b";
+			if (!pass2.empty()) {
+				pass2.pop_back();
+			}
+			continue;
+		} else if (chPass2 == 3) {
+			quit();
+		} else if (chPass2 < 48 || chPass2 > 57) {
+			continue;
+		}
+		pass2 += chPass2;
+		cout << '*';
+	}
+	if (pass != pass2) {
+		errorHandler("Password tidak sama!");
+		return ubahPassword(user);
+	}
+	system("cls");
+	ubahPasswordFr(user, pass, newUser);
+	cout << "==== Berhasil ====\n\nBerhasil mengubah password user " + user + "\n\n";
+	system("pause");
+	menu(5);
+}
+
+void logAllTransaksi() {
+	system("cls");
+	cout << "==== Log Semua Transaksi ====\n\n";
+	for (int i = 0; i < totalLog; i++) {
+		string jumlah;
+		int desimal;
+		treatAngka(logs[i].jumlah, &jumlah, &desimal);
+		cout << logs[i].user << "\n" << logs[i].dari << "\nRp. "
+		<< jumlah << "," << setw(2) << setfill('0') << desimal << "\n\n";
+	}
+	system("pause");
+	return menu(5);
+}
+
+void cariUserHandler() {
+	system("cls");
+	cout << "==== Cari Akun ====\n\nMasukkan nama user : ";
+	string user = "";
+	char ch;
+	while (ch != 13) {
+		ch = optionHandler();
+		if (ch == 8 && user.length() > 0) {
+			cout << "\b \b";
+			if (!user.empty()) {
+				user.pop_back();
+			}
+			continue;
+		} else if (ch < 97 || ch > 122) {
+			continue;
+		}
+		if (user.length() < 20) {
+			user += ch;
+			cout << ch;
+		}
+	}
+	system("cls");
+	if (checkNameAvailability(user)) {
+		errorHandler("Username tidak ditemukan!");
+		return cariUserHandler();
+	}
+	UserData newUser = cariUser(user);
+	string saldoPretty;
+	int desimal;
+	treatAngka(newUser.saldo, &saldoPretty, &desimal);
+	cout << "==== Akun Ditemukan ====\n\nNama : " << newUser.nama << "\nLevel : "
+	<< newUser.level << "\nSaldo : Rp. " << saldoPretty + "," << setw(2) << setfill('0') << desimal << "\n\n";
+	system("pause");
+	menu(5);
 }
 
 void readUserData(string user) {
@@ -511,6 +685,9 @@ void menu(int num) {
 			break;
 
 		case 2: { // menu after logged in
+			if (currentUser.level == "admin") {
+				return menu(5);
+			}
 			cout << "==== Selamat datang, " + currentUser.nama + " ====\n\n";
 			cout << "1. Informasi akun\n2. Transaksi\n0. Keluar\n\nMasukkan pilihan : ";
 			char pil = '\0';
@@ -602,6 +779,73 @@ void menu(int num) {
 					break;
 			}}
 			break;
+
+		case 5: { // menu admin
+			if (currentUser.level == "user") { // if somehow user gets here
+				return menu(2);
+			}
+			cout << "==== Selamat datang, " + currentUser.nama + " ====\n\n";
+			cout << "1. Informasi akun\n2. Transaksi\n3. Menu admin\n0. Keluar\n\nMasukkan pilihan : ";
+			char pil = '\0';
+			pil = optionHandler();
+			switch (pil) {
+				case '1':
+					menu(3);
+					break;
+
+				case '2':
+					menu(4);
+					break;
+
+				case '3':
+					menu(6);
+					break;
+
+				case '0':
+					quit();
+				case '\0':
+					return;
+				
+				default:
+					cout << "Pilihan invalid!\n";
+					system("pause");
+					menu(5);
+					break;
+			}}
+			break;
+
+		case 6: { // menu admin fr
+			cout << "==== Menu Admin ====\n\n";
+			cout << "1. Cari akun\n2. Ubah password\n3. Log semua transaksi\n0. Kembali\n\nMasukkan pilihan : ";
+			char pil = '\0';
+			pil = optionHandler();
+			switch (pil) {
+				case '1':
+					cariUserHandler();
+					break;
+
+				case '2':
+					ubahPassword();
+					break;
+
+				case '3':
+					logAllTransaksi();
+					break;
+
+				case '0':
+					menu(5);
+					break;
+				
+				case '\0':
+					return;
+				
+				default:
+					cout << "Pilihan invalid!\n";
+					system("pause");
+					menu(6);
+					break;
+			}}
+			break;
 	}
 	system("cls");
 	return;
@@ -687,19 +931,31 @@ bool validate(string nama, string hash, int check) {
 
 void login() {
 	system("cls");
-	cout << "==== Login ====\n\n";
+	cout << "==== Login ====\n\nUsername : ";
 	string user = "";
-	cout << "Username : ";
-	if (!getline(cin, user)) {
-		return;
+	char ch;
+	while (ch != 13) {
+		ch = optionHandler();
+		if (ch == 8 && user.length() > 0) {
+			cout << "\b \b";
+			if (!user.empty()) {
+				user.pop_back();
+			}
+			continue;
+		} else if (ch < 97 || ch > 122) {
+			continue;
+		}
+		if (user.length() < 20) {
+			user += ch;
+			cout << ch;
+		}
 	}
 	int check = checkUser(&user);
 	if (check == -1) {
 		return login();
 	}
 	string pass = "";
-	char ch;
-	cout << "Password : ";
+	cout << "\nPassword : ";
 	while (pass.length() < 6) {
 		ch = _getch();
 		if (ch == 8 && pass.length() > 0) {
@@ -719,6 +975,9 @@ void login() {
 	string hashed = hashAlgo(&user, &pass);
 	if (validate(user, hashed, check)) {
 		readUserData(user);
+		if (currentUser.level == "admin") {
+			return menu(5);
+		}
 		return menu(2);
 	} else {
 		errorHandler("Pin salah!");
@@ -772,7 +1031,7 @@ void daftar(string nama, string user, string level) {
 			errorHandler("Nama terlalu panjang!");
 			return daftar("", "", level);
 		}
-		if (!regex_match(nama, regex("^[A-Za-z ']+$")) || regex_match(nama, regex("^ +$"))) {
+		if (!regex_match(nama, regex("^[A-Za-z '.`]+$")) || regex_match(nama, regex("^ +$"))) {
 			errorHandler("Nama hanya boleh berisi alfabet dan spasi!");
 			return daftar("", "", level);
 		};
