@@ -9,6 +9,7 @@
 #include <vector>
 #include <cmath>
 #include <iomanip>
+#include <regex>
 #include "include/sha256.h"
 
 using namespace std;
@@ -42,19 +43,19 @@ UserLog* logs;
 
 void greet();
 void login();
-void daftar();
+void daftar(string nama = "", string user = "", string level = "user");
 void menu(int num);
 void errorHandler(string err);
 char optionHandler();
-bool isQuit = false, doneLoading = false;
-int totalUser = 0, totalLog;
+bool isQuit = false, doneLoading = false, doneReading = false;
+int totalUser, totalLog;
 double bunga;
 
 void loadingScr() {
 	char spinner[4] = {'|', '/', '-', '\\'};
 	int counter  = 0;
 	cout << "Loading...  ";
-	while(!doneLoading) {
+	while(!doneLoading || !doneReading) {
 		cout << '\b' << spinner[counter];
 		counter = (counter+1) % 4;
 		sleep_for(milliseconds(200));
@@ -70,21 +71,24 @@ void readMasterData() {
 	baca >> total;
 	baca >> bunga;
 	totalUser = total;
-	users = new MasterData[total];
-	for (int i = 0; i < total; i++) {
-		baca >> users[i].id;
-		baca >> users[i].user;
-		baca >> users[i].hashPin;
-	}
+	users = new MasterData[total+10];
 	baca.close();
+	ifstream bacaUser("./data/usermaster.txt");
+	for (int i = 0; i < total; i++) {
+		bacaUser >> users[i].id;
+		bacaUser >> users[i].user;
+		bacaUser >> users[i].hashPin;
+	}
+	bacaUser.close();
 	ifstream bacaLog("./data/log.txt");
 	bacaLog >> totalLog;
-	logs = new UserLog[totalLog];
+	logs = new UserLog[totalLog+10];
 	for (int i = 0; i < totalLog; i++) {
 		bacaLog >> logs[i].dari;
 		bacaLog >> logs[i].jumlah;
 	}
 	bacaLog.close();
+	doneReading = true;
 	return;
 }
 
@@ -97,7 +101,7 @@ void readUserData(string user) {
 	baca >> currentUser.id >> currentUser.nama >> currentUser.user
 	>> currentUser.hashPin >> currentUser.level >> currentUser.saldo;
 	bacaLog >> currentUser.jmlLog;
-	currentUser.log = new UserLog[currentUser.jmlLog];
+	currentUser.log = new UserLog[currentUser.jmlLog+10];
 	for (int i = 0; i < currentUser.jmlLog; i++) {
 		bacaLog >> currentUser.log[i].dari;
 		bacaLog >> currentUser.log[i].jumlah;
@@ -123,11 +127,12 @@ void init() {
 	thread t3([]() { // lambda function
 		sleep_for(milliseconds(2000));
 		doneLoading = true;
-		ShowConsoleCursor(true);
 	});
 	t1.join();
 	t2.join();
 	t3.join();
+	ShowConsoleCursor(true);
+	doneLoading = false; doneReading = false;
 	return greet();
 }
 
@@ -238,6 +243,7 @@ void logTransaksi() {
 
 void deposit() {
 	system("cls");
+	// For every transaksi, jangan lupa tambahin data ke semua variable (termasuk in program)
 
 }
 
@@ -442,6 +448,15 @@ int checkUser(string *user) {
 	return -1;
 }
 
+bool checkNameAvailability(string user) {
+	ifstream baca("./userdata/" + user + "/data.txt");
+	if (baca.fail()) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 bool validate(string nama, string hash, int check) {
 	if (users[check].user == nama && users[check].hashPin == hash) {
 		return true;
@@ -491,8 +506,135 @@ void login() {
 	}
 }
 
-void daftar() {
+void initUser(string nama, string user, string hashPin, string level = "user") {
+	// update master, mkdir, create data and log
+	users[totalUser].id = totalUser+1;
+	users[totalUser].user = user;
+	users[totalUser].hashPin = hashPin;
+	totalUser += 1;
+	ofstream tulis("./data/master.txt", ios::trunc);
+	tulis << totalUser << "\n" << bunga;
+	tulis.close();
+	ofstream tulisUser("./data/usermaster.txt", ios::app);
+	tulisUser << "\n\n" << totalUser << "\n" << user << "\n" << hashPin;
+	tulisUser.close();
+	ofstream tulisUserData("./userdata/" + user + "/data.txt");
+	ofstream tulisUserLog("./userdata/" + user + "/log.txt");
+	tulisUserData << totalUser << "\n" << nama << "\n" << user << "\n" << hashPin
+	<< "\n" << level << "\n" << 0;
+	tulisUserLog << 0;
+	tulisUserData.close();
+	tulisUserLog.close();
+}
 
+void daftar(string nama, string user, string level) {
+	system("cls");
+	cout << "==== Daftar ====\n\n";
+	cout << "Masukkan nama \t\t\t\t: ";
+	if (nama.length() > 0) {
+		cout << nama << "\n";
+	} else {
+		if (!getline(cin, nama)) {
+			return;
+		}
+		if (nama.length() == 0) {
+			errorHandler("Nama tidak boleh kosong!");
+			return daftar("", "", level);
+		}
+		if (nama.length() > 50) { // idk, I'd just use 50
+			errorHandler("Nama terlalu panjang!");
+			return daftar("", "", level);
+		}
+		if (!regex_match(nama, regex("^[A-Za-z ']+$")) || regex_match(nama, regex("^ +$"))) {
+			errorHandler("Nama hanya boleh berisi alfabet dan spasi!");
+			return daftar("", "", level);
+		};
+	}
+	char ch;
+	cout << "\nMasukkan username (lowercase) \t\t: ";
+	if (user.length() > 0) {
+		cout << user;
+	} else {
+		while (ch != 13) {
+			ch = optionHandler();
+			if (ch == 8 && user.length() > 0) {
+				cout << "\b \b";
+				if (!user.empty()) {
+					user.pop_back();
+				}
+				continue;
+			} else if (ch < 97 || ch > 122) {
+				continue;
+			}
+			if (user.length() < 20) {
+				user += ch;
+				cout << ch;
+			}
+		}
+		if (user.length() == 0) {
+			errorHandler("Username tidak boleh kosong!");
+			return daftar(nama, "", level);
+		}
+		if (!checkNameAvailability(user)) {
+			errorHandler("Username sudah diambil!");
+			return daftar(nama, "", level);
+		}
+	}
+	cout << "\n\nMasukkan password (6 digit pin) \t: ";
+	string pass = "";
+	char chPass;
+	while (pass.length() < 6) {
+		chPass = _getch();
+		if (chPass == 8 && pass.length() > 0) {
+			cout << "\b \b";
+			if (!pass.empty()) {
+				pass.pop_back();
+			}
+			continue;
+		} else if (chPass == 3) {
+			quit();
+		} else if (chPass < 48 || chPass > 57) {
+			continue;
+		}
+		pass += chPass;
+		cout << '*';
+	}
+	cout << "\n\nMasukkan ulang password (6 digit pin) \t: ";
+	string pass2 = "";
+	char chPass2;
+	while (pass2.length() < 6) {
+		chPass2 = _getch();
+		if (chPass2 == 8 && pass2.length() > 0) {
+			cout << "\b \b";
+			if (!pass2.empty()) {
+				pass2.pop_back();
+			}
+			continue;
+		} else if (chPass2 == 3) {
+			quit();
+		} else if (chPass2 < 48 || chPass2 > 57) {
+			continue;
+		}
+		pass2 += chPass2;
+		cout << '*';
+	}
+	if (pass != pass2) {
+		errorHandler("Password tidak sama!");
+		return daftar(nama, user, level);
+	}
+	string hashed = hashAlgo(&user, &pass);
+	system("cls");
+	ShowConsoleCursor(false);
+	thread i1(loadingScr);
+	thread i2(initUser, nama, user, hashed, level);
+	thread i3([]() { // lambda function
+		sleep_for(milliseconds(2000));
+		doneLoading = true;
+	});
+	i1.join();
+	i2.join();
+	i3.join();
+	ShowConsoleCursor(true);
 }
 
 int main() {
