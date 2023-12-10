@@ -19,7 +19,7 @@ Membuat mockup sistem bank
 Use the GNU g++ compiler to compile main.cpp.
 
 ```bash
-g++ main.cpp -o main ; ./main
+g++ Kelompok3_SistemBank_150_180_156 -o Kelompok3_SistemBank_150_180_156; ./Kelompok3_SistemBank_150_180_156
 ```
 
 ## Anggota Kelompok
