@@ -24,3 +24,4 @@ g++ main.cpp -o main ; ./main
 ### Sidenote
 
 > ``📝`` Hanya compatible untuk windows
+> ``📝`` Default login admin dengan pin 123456

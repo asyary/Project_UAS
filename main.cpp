@@ -36,6 +36,7 @@ struct MasterData {
 };
 
 MasterData* users;
+UserLog* currentLog;
 
 void greet();
 void login();
@@ -45,6 +46,7 @@ void errorHandler(string err);
 char optionHandler();
 bool isQuit = false, doneLoading = false;
 int totalUser = 0;
+double bunga;
 
 void loadingScr() {
 	char spinner[4] = {'|', '/', '-', '\\'};
@@ -64,6 +66,7 @@ void readMasterData() {
 	}
 	int total;
 	baca >> total;
+	baca >> bunga;
 	totalUser = total;
 	users = new MasterData[total];
 	for (int i = 0; i < total; i++) {
@@ -77,6 +80,7 @@ void readMasterData() {
 
 void readUserData(string user) {
 	ifstream baca("./userdata/" + user + "/data.txt");
+	ifstream bacaLog("./userdata/" + user + "/log.txt");
 	if (baca.fail()) {
 		return errorHandler("Error membaca data user!");
 	}
@@ -117,26 +121,78 @@ void quit() {
 	exit(0);
 }
 
+void treatAngka(double saldo, string* saldoStr, int* desimal) {
+	int newSaldo = saldo; // reminder to always round by 2 decimal places
+	*saldoStr = to_string(newSaldo); // always setw(2) << setfill('0')
+	int saldoLen = saldoStr->length();
+	int jarak = 3;
+	while (saldoLen > jarak) {
+		saldoStr->insert(saldoLen - jarak, 1, '.');
+		jarak += 4; saldoLen += 1;
+	}
+	*desimal = (double)round((saldo - newSaldo)*100);
+	return;
+}
+
 void cekSaldo() {
 	system("cls");
 	// Do some math demi keliatan bagus angkanya
 	double saldo = currentUser.saldo;
-	int newSaldo = saldo;
-	string saldoStr = to_string(newSaldo);
-	int saldoLen = saldoStr.length();
-	int jarak = 3;
-	while (saldoLen > jarak) {
-		saldoStr.insert(saldoLen - jarak, 1, '.');
-		jarak += 4; saldoLen += 1;
-	}
-	int desimal = (int)round((currentUser.saldo - saldo)*100);
+	string saldoStr;
+	int desimal;
+	treatAngka(saldo, &saldoStr, &desimal);
 	cout << "==== Saldo ====\n\nRp. " << saldoStr << "," << setw(2) << setfill('0') << desimal << "\n\n";
 	system("pause");
 	menu(2);
 }
 
-void bungaSaldo() {
+double compound(double saldo, double interest, int month) {
+	if (month == 0) {
+		return saldo;
+	}
+	saldo += (saldo*interest);
+	return compound(saldo, interest, month-1);
+}
 
+void bungaSaldo() {
+	system("cls");
+	string bungaStr = to_string(bunga*100);
+	bungaStr.replace(bungaStr.find('.'), 1, ",");
+	bungaStr.erase(bungaStr.find_last_not_of('0')+1);
+	cout << "==== Perkiraan Saldo ====\n\nBunga kami sebesar " + bungaStr + "% per bulan\n\n";
+	cout << "Masukkan jumlah waktu (dalam bulan) : ";
+	string bulan;
+	char num = 0;
+	while (num != 13) {
+		num = optionHandler();
+		if (num == 8 && bulan.length() > 0) {
+			cout << "\b \b";
+			if (!bulan.empty()) {
+				bulan.pop_back();
+			}
+			continue;
+		} else if (num < 48 || num > 57) {
+			continue;
+		}
+		if (bulan.length() < 4) {
+			bulan += num;
+			cout << num;
+		}
+	}
+	system("cls");
+	double currentSaldo = currentUser.saldo;
+	double hasil = compound(currentSaldo, bunga, stoi(bulan));
+	hasil = round(hasil*100)/100; // round 2 decimal digits
+	string strHasil, strTambah, strSaldo;
+	int desimalHasil, desimalTambah, desimalSaldo;
+	treatAngka(hasil, &strHasil, &desimalHasil);
+	treatAngka(currentSaldo, &strSaldo, &desimalSaldo);
+	treatAngka(hasil - currentSaldo, &strTambah, &desimalTambah);
+	cout << "==== Perkiraan Saldo ====\n\nDalam " + bulan + " bulan, saldo anda akan menjadi Rp. " + strHasil + "," 
+	<< setw(2) << setfill('0') << desimalHasil << "\nBertambah Rp. " << strTambah + "," << desimalTambah << " dari saldo utama (Rp. "
+	<< strSaldo + "," << desimalSaldo << ")\n\n";
+	system("pause");
+	menu(2);
 }
 
 void logTransaksi() {
