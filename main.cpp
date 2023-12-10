@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <signal.h>
 #include <vector>
+#include <cmath>
 #include <iomanip>
 #include "include/sha256.h"
 
@@ -21,7 +22,7 @@ struct UserData {
 	string hashPin;
 	string level;
 	double saldo;
-};
+} currentUser;
 
 struct MasterData {
 	int id;
@@ -34,6 +35,8 @@ MasterData* users;
 void greet();
 void login();
 void daftar();
+void menu(int num);
+void errorHandler(string err);
 char optionHandler();
 bool isQuit = false, doneLoading = false;
 int totalUser = 0;
@@ -63,6 +66,17 @@ void readMasterData() {
 		baca >> users[i].user;
 		baca >> users[i].hashPin;
 	}
+	baca.close();
+	return;
+}
+
+void readUserData(string user) {
+	ifstream baca("./userdata/" + user + "/data.txt");
+	if (baca.fail()) {
+		return errorHandler("Error membaca data user!");
+	}
+	baca >> currentUser.id >> currentUser.nama >> currentUser.user
+	>> currentUser.hashPin >> currentUser.level >> currentUser.saldo;
 	baca.close();
 	return;
 }
@@ -98,9 +112,47 @@ void quit() {
 	exit(0);
 }
 
+void cekSaldo() {
+	system("cls");
+	// Do some math demi keliatan bagus angkanya
+	double saldo = currentUser.saldo;
+	int newSaldo = saldo;
+	string saldoStr = to_string(newSaldo);
+	int saldoLen = saldoStr.length();
+	int jarak = 3;
+	while (saldoLen > jarak) {
+		saldoStr.insert(saldoLen - jarak, 1, '.');
+		jarak += 4; saldoLen += 1;
+	}
+	int desimal = (int)round((currentUser.saldo - saldo)*100);
+	cout << "==== Saldo ====\n\nRp. " << saldoStr << "," << setw(2) << setfill('0') << desimal << "\n\n";
+	system("pause");
+	menu(2);
+}
+
+void bungaSaldo() {
+
+}
+
+void logTransaksi() {
+
+}
+
+void deposit() {
+
+}
+
+void withdraw() {
+
+}
+
+void kirimUang() {
+
+}
+
 void menu(int num) {
-	switch (num) { // main menu
-		case 1:
+	switch (num) {
+		case 1: { // main menu
 			system("cls");
 			string mainMenu = "==== Selamat Datang ====\n\n1. Login\n2. Daftar\n0. Keluar\n\n";
 			cout << mainMenu << "Masukkan pilihan : ";
@@ -125,10 +177,104 @@ void menu(int num) {
 					system("pause");
 					menu(1);
 					break;
-			}
+			}}
 			break;
 
+		case 2: { // menu after logged in
+			system("cls");
+			cout << "==== Selamat datang, " + currentUser.nama + " ====\n\n";
+			cout << "1. Informasi akun\n2. Transaksi\n0. Keluar\n\nMasukkan pilihan : ";
+			char pil = '\0';
+			pil = optionHandler();
+			switch (pil) {
+				case '1':
+					menu(3);
+					break;
 
+				case '2':
+					menu(4);
+					break;
+
+				case '0':
+					quit();
+				case '\0':
+					return;
+				
+				default:
+					cout << "Pilihan invalid!\n";
+					system("pause");
+					menu(2);
+					break;
+			}}
+			break;
+
+		case 3: { // menu informasi
+			system("cls");
+			cout << "==== Informasi Akun ====\n\n1. Jumlah saldo\n2. Perkiraan saldo\n3. Log transaksi\n0. Kembali";
+			cout << "\n\nMasukkan pilihan : ";
+			char pil = '\0';
+			pil = optionHandler();
+			switch (pil) {
+				case '1':
+					cekSaldo();
+					break;
+
+				case '2':
+					bungaSaldo();
+					break;
+
+				case '3':
+					logTransaksi();
+					break;
+
+				case '0':
+					menu(2);
+					break;
+				
+				case '\0':
+					return;
+				
+				default:
+					cout << "Pilihan invalid!\n";
+					system("pause");
+					menu(3);
+					break;
+			}}
+			break;
+
+		case 4: { // menu informasi
+			system("cls");
+			cout << "==== Transaksi ====\n\n1. Deposit\n2. Withdraw\n3. Kirim uang\n0. Kembali";
+			cout << "\n\nMasukkan pilihan : ";
+			char pil = '\0';
+			pil = optionHandler();
+			switch (pil) {
+				case '1':
+					deposit();
+					break;
+
+				case '2':
+					withdraw();
+					break;
+
+				case '3':
+					kirimUang();
+					break;
+
+				case '0':
+					menu(2);
+					break;
+				
+				case '\0':
+					return;
+				
+				default:
+					cout << "Pilihan invalid!\n";
+					system("pause");
+					menu(3);
+					break;
+			}}
+			break;
 	}
 	system("cls");
 	return;
@@ -236,8 +382,8 @@ void login() {
 	}
 	string hashed = hashAlgo(&user, &pass);
 	if (validate(user, hashed, check)) {
-		cout << "gas";
-		cin >> ch;
+		readUserData(user);
+		return menu(2);
 	} else {
 		errorHandler("Pin salah!");
 		return login();
