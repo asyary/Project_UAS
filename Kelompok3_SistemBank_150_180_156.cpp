@@ -219,6 +219,21 @@ void ubahPassword(string user = "") {
 	menu(5);
 }
 
+void ubahBunga() {
+	system("cls");
+	cout << "==== Ubah Bunga ====\n\nMasukkan jumlah bunga (dalam persen) : ";
+	double newBunga;
+	cin >> newBunga;
+	newBunga /= 100;
+	ofstream tulis("./data/master.txt", ios::trunc);
+	tulis << totalUser << "\n" << newBunga;
+	tulis.close();
+	system("cls");
+	cout << "==== Berhasil ====\n\nBunga berhasil diganti!\n\n";
+	system("pause");
+	return menu(5);
+}
+
 void logAllTransaksi() {
 	system("cls");
 	cout << "==== Log Semua Transaksi ====\n\n";
@@ -816,7 +831,7 @@ void menu(int num) {
 
 		case 6: { // menu admin fr
 			cout << "==== Menu Admin ====\n\n";
-			cout << "1. Cari akun\n2. Ubah password\n3. Log semua transaksi\n0. Kembali\n\nMasukkan pilihan : ";
+			cout << "1. Cari akun\n2. Ubah password\n3. Log semua transaksi\n4. Ubah bunga\n0. Kembali\n\nMasukkan pilihan : ";
 			char pil = '\0';
 			pil = optionHandler();
 			switch (pil) {
@@ -831,6 +846,11 @@ void menu(int num) {
 				case '3':
 					logAllTransaksi();
 					break;
+
+				case '4':
+					ubahBunga();
+					break;
+
 
 				case '0':
 					menu(5);
